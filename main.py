@@ -1,19 +1,23 @@
 from __future__ import print_function
+
 import argparse
-import torch
-import torch.utils.data
-import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
-import torchvision
-from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
+import os
 import time
 from glob import glob
-import os
-from util import *
+
+import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.utils.data
+import torchvision
 from PIL import Image
+from torch.autograd import Variable
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+
+from util import *
 
 parser = argparse.ArgumentParser(description='PyTorch VAE')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
@@ -26,9 +30,15 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='how many batches to wait before logging training status')
+parser.add_argument('--img-size', type=int, default=64, metavar='N',
+                    help='input image size for the model (default: 64)')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
+# batch size
+batch_size = args.batch_size
+im_size = args.img_size
+print('batch size: ', batch_size)
 
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if args.cuda else "cpu")
@@ -38,18 +48,34 @@ train_loader = range(2080)
 test_loader = range(40)
 
 totensor = transforms.ToTensor()
-def load_batch(batch_idx, istrain):
+# def load_batch(batch_idx, istrain):
+#     if istrain:
+#         template = '../data/train/img%s.png'
+#     else:
+#         template = '../data/test/img%s.png'
+#     l = [str(batch_idx*128 + i).zfill(6) for i in range(128)]
+#     data = []
+#     for idx in l:
+#         img = Image.open(template%idx)
+#         data.append(np.array(img))
+#     data = [totensor(i) for i in data]
+#     return torch.stack(data, dim=0)
+def load_batch(istrain):
+    # data_loaderを用いる新しいversion
     if istrain:
-        template = '../data/train/img%s.png'
+        template = '../../data/vae_solar/train/'
     else:
-        template = '../data/test/img%s.png'
-    l = [str(batch_idx*128 + i).zfill(6) for i in range(128)]
-    data = []
-    for idx in l:
-        img = Image.open(template%idx)
-        data.append(np.array(img))
-    data = [totensor(i) for i in data]
-    return torch.stack(data, dim=0)
+        template = '../../data/vae_solar/test/'
+    # l = [str(batch_idx*batch_size + i).zfill(6) for i in range(batch_size)]
+    # load dataset
+    transform = transforms.Compose([
+        transforms.Resize((im_size, im_size)),
+        transforms.ToTensor()
+    ])
+    dataset = datasets.ImageFolder(template, transform)
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    # images, labels = iter(data_loader).next()
+    return data_loader
 
 class VAE(nn.Module):
     def __init__(self, nc, ngf, ndf, latent_variable_size):
@@ -174,44 +200,57 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 def train(epoch):
     model.train()
     train_loss = 0
-    for batch_idx in train_loader:
-        data = load_batch(batch_idx, True)
+    data_loader = load_batch(istrain=True)
+    # for batch_idx in train_loader:
+    for i, datas in enumerate(data_loader):
+        # data = load_batch(batch_idx, True)
+        data, _ = datas
         data = data.to(device)
         # data = Variable(data)
         # if args.cuda:
         #     data = data.cuda()
+        # 勾配の初期化
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
         loss = loss_function(recon_batch, data, mu, logvar)
+
+        # train_loss += loss.data[0]
+        train_loss += loss.item()
+
         loss.backward()
-        train_loss += loss.data[0]
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+
+        if i % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), (len(train_loader)*128),
-                100. * batch_idx / len(train_loader),
-                loss.data[0] / len(data)))
+                epoch, i, len(data_loader),
+                100. * i / len(data_loader),
+                loss.item() ))
 
     print('====> Epoch: {} Average loss: {:.4f}'.format(
-          epoch, train_loss / (len(train_loader)*128)))
-    return train_loss / (len(train_loader)*128)
+          epoch, train_loss / (len(data_loader))))
+    return train_loss / (len(data_loader))
 
 def test(epoch):
     model.eval()
     test_loss = 0
-    for batch_idx in test_loader:
-        data = load_batch(batch_idx, False)
+    # data loader
+    data_loader = load_batch(istrain=False)
+
+    # for batch_idx in test_loader:
+    for i, datas in enumerate(data_loader):
+        # data = load_batch(batch_idx, False)
+        data, _ = datas
         data = data.to(device)
         # data = Variable(data, volatile=True)
         # if args.cuda:
         #     data = data.cuda()
         recon_batch, mu, logvar = model(data)
-        test_loss += loss_function(recon_batch, data, mu, logvar).data[0]
+        test_loss += loss_function(recon_batch, data, mu, logvar).item() 
 
         torchvision.utils.save_image(data.data, './imgs/Epoch_{}_data.jpg'.format(epoch), nrow=8, padding=2)
         torchvision.utils.save_image(recon_batch.data, './imgs/Epoch_{}_recon.jpg'.format(epoch), nrow=8, padding=2)
 
-    test_loss /= (len(test_loader)*128)
+    test_loss /= (len(data_loader))
     print('====> Test set loss: {:.4f}'.format(test_loss))
     return test_loss
 
