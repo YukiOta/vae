@@ -38,7 +38,6 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 # batch size
 batch_size = args.batch_size
 im_size = args.img_size
-print('batch size: ', batch_size)
 
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if args.cuda else "cpu")
@@ -48,24 +47,13 @@ train_loader = range(2080)
 test_loader = range(40)
 
 totensor = transforms.ToTensor()
-# def load_batch(batch_idx, istrain):
-#     if istrain:
-#         template = '../data/train/img%s.png'
-#     else:
-#         template = '../data/test/img%s.png'
-#     l = [str(batch_idx*128 + i).zfill(6) for i in range(128)]
-#     data = []
-#     for idx in l:
-#         img = Image.open(template%idx)
-#         data.append(np.array(img))
-#     data = [totensor(i) for i in data]
-#     return torch.stack(data, dim=0)
 def load_batch(istrain):
     # data_loaderを用いる新しいversion
     if istrain:
-        template = '../../data/vae_solar/train/'
+        template = '../data/PV_IMAGE/201705'
     else:
-        template = '../../data/vae_solar/test/'
+        template = '../data/vae_solar/test/'
+        # template = '../data/PV_IMAGE/201706'
     # l = [str(batch_idx*batch_size + i).zfill(6) for i in range(batch_size)]
     # load dataset
     transform = transforms.Compose([
@@ -329,7 +317,7 @@ def rand_faces(num=5):
 def load_last_model():
     models = glob('./models/*.pth')
     print(models)
-    model_ids = [(int(f.split('_')[2]), f) for f in models]
+    model_ids = [(int(f.split('_')[1]), f) for f in models]
     start_epoch, last_cp = max(model_ids, key=lambda item:item[0])
     print('Last checkpoint: ', last_cp)
     model.load_state_dict(torch.load(last_cp))
@@ -349,23 +337,20 @@ def last_model_to_cpu():
     torch.save(model.state_dict(), './models/cpu_'+last_cp.split('/')[-1])
 
 def data_rename(dataPath):
-    trainPath = os.path.join(dataPath, "train")
-    testPath = os.path.join(dataPath, "test")
-    ls_train = glob(os.path.join(trainPath, "*.png"))
-    ls_test = glob(os.path.join(testPath, "*.png"))
-    ls_train.sort()
-    print(ls_train[0].split("/")[-1])
-    if ls_train[0].split("/")[-1] == "img000000.png":
+    # trainPath = os.path.join(dataPath, "train")
+    # testPath = os.path.join(dataPath, "test")
+    ls_file = glob(os.path.join(dataPath, "*.png"))
+    ls_file.sort()
+    print(ls_file[0].split("/")[-1])
+    if ls_file[0].split("/")[-1] == "img000000.png":
         print("ready")
     else:
-        for count, filename in enumerate(ls_train):
-            os.rename(ls_train[count], os.path.join(trainPath, "img{0:06d}".format(count) + os.path.splitext(ls_train[count])[1]))
-        for count, filename in enumerate(ls_test):
-            os.rename(ls_test[count], os.path.join(testPath, "img{0:06d}".format(count) + os.path.splitext(ls_test[count])[1]))
+        for count, filename in enumerate(ls_file):
+            os.rename(ls_file[count], os.path.join(dataPath, "img{0:06d}".format(count) + os.path.splitext(ls_file[count])[1]))
 
 if __name__ == '__main__':
-    dataPath = "../data/"
-    data_rename(dataPath)
+    # data_rename("../data/vae_solar/train/train")
+    # data_rename("../data/vae_solar/test/test")
     resume_training()
     # last_model_to_cpu()
     # load_last_model()
