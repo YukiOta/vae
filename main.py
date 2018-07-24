@@ -3,6 +3,7 @@ from __future__ import print_function
 import argparse
 import os
 import time
+import datetime
 from glob import glob
 
 import matplotlib.pyplot as plt
@@ -26,18 +27,26 @@ parser.add_argument('--epochs', type=int, default=20, metavar='N',
                     help='number of epochs to train (default: 20)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
+parser.add_argument('--resume', action='store_true', default=False,
+                    help='enables CUDA training')
 parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                     help='how many batches to wait before logging training status')
-parser.add_argument('--img-size', type=int, default=64, metavar='N',
-                    help='input image size for the model (default: 64)')
+parser.add_argument('--img-size', type=int, default=128, metavar='N',
+                    help='input image size for the model (default: 128)')
+parser.add_argument('--filter-size', type=int, default=128, metavar='N',
+                    help='filter size for the model (default: 128)')
+parser.add_argument('--latent-size', type=int, default=500, metavar='N',
+                    help='latent size for the model (default: 500)')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 # batch size
 batch_size = args.batch_size
 im_size = args.img_size
+filter_size = args.filter_size
+latent_size = args.latent_size
 
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if args.cuda else "cpu")
@@ -166,7 +175,7 @@ class VAE(nn.Module):
         return res, mu, logvar
 
 
-model = VAE(nc=3, ngf=128, ndf=128, latent_variable_size=500).to(device)
+model = VAE(nc=3, ngf=filter_size, ndf=filter_size, latent_variable_size=latent_size).to(device)
 
 if args.cuda:
     model.cuda()
@@ -348,10 +357,26 @@ def data_rename(dataPath):
         for count, filename in enumerate(ls_file):
             os.rename(ls_file[count], os.path.join(dataPath, "img{0:06d}".format(count) + os.path.splitext(ls_file[count])[1]))
 
+def train_from_scratch():
+    for epoch in range(1, args.epochs + 1):
+        train_loss = train(epoch)
+        test_loss = test(epoch)
+        target_dir = os.path.join(save_dir, 'Epoch_{}_Train_loss_{:.4f}_Test_loss_{:.4f}.pth'.format(epoch, train_loss, test_loss))
+        torch.save(model.state_dict(), target_dir)
+
 if __name__ == '__main__':
     # data_rename("../data/vae_solar/train/train")
     # data_rename("../data/vae_solar/test/test")
-    resume_training()
+    if args.resume:
+        resume_training()
+    else:
+        time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M')
+        save_dir = os.path.join('./models/', time_now)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        train_from_scratch()
+
     # last_model_to_cpu()
     # load_last_model()
     # rand_faces(10)

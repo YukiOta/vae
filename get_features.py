@@ -144,6 +144,7 @@ class VAE(nn.Module):
 
 
 def main():
+    # 潜在変数の数を変える
     model = VAE(nc=3, ngf=128, ndf=128, latent_variable_size=500).to(device)
     if args.cuda:
         model.cuda()
