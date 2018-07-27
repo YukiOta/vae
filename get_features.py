@@ -1,4 +1,6 @@
 import argparse
+import re
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -176,8 +178,11 @@ def main():
         mu, logvar = mu.data.numpy(), logvar.data.numpy()
 
         # numpy配列の保存
-        np.save("./results/datX_%d.npy" % (i), mu)
-        np.save("./results/datY_%d.npy" % (i), labels)
+        save_name = re.match(r"Epoch_\d+", os.path.basename(path)).group()
+        if not os.path.exists(os.path.join("./results", save_name)):
+            os.mkdir(os.path.join("./results", save_name))
+        np.save(os.path.join("./results", save_name, "datX_%d.npy" % (i)), mu)
+        np.save(os.path.join("./results", save_name, "datY_%d.npy" % (i)), labels)
         # datX_all.append(mu)
         # datY_all.append(labels)
 

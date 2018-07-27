@@ -39,6 +39,8 @@ parser.add_argument('--filter-size', type=int, default=128, metavar='N',
                     help='filter size for the model (default: 128)')
 parser.add_argument('--latent-size', type=int, default=500, metavar='N',
                     help='latent size for the model (default: 500)')
+parser.add_argument('--model-dirname', type=str, default='models', metavar='N',
+                    help='dirname of model dirctory (default: "models")')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -244,8 +246,9 @@ def test(epoch):
         recon_batch, mu, logvar = model(data)
         test_loss += loss_function(recon_batch, data, mu, logvar).item() 
 
-        torchvision.utils.save_image(data.data, './imgs/Epoch_{}_data.jpg'.format(epoch), nrow=8, padding=2)
-        torchvision.utils.save_image(recon_batch.data, './imgs/Epoch_{}_recon.jpg'.format(epoch), nrow=8, padding=2)
+        # torchvision.utils.save_image(data.data, './imgs/Epoch_{}_data.jpg'.format(epoch), nrow=8, padding=2)
+        torchvision.utils.save_image(data.data, os.path.join('./imgs', dir_name, 'Epoch_{}_data.jpg'.format(epoch)), nrow=8, padding=2)
+        torchvision.utils.save_image(recon_batch.data, os.path.join('./imgs', dir_name, 'Epoch_{}_recon.jpg'.format(epoch)), nrow=8, padding=2)
 
     test_loss /= (len(data_loader))
     print('====> Test set loss: {:.4f}'.format(test_loss))
@@ -323,8 +326,9 @@ def rand_faces(num=5):
     recon = model.decode(z)
     torchvision.utils.save_image(recon.data, './imgs/rand_faces.jpg', nrow=num, padding=2)
 
-def load_last_model():
-    models = glob('./models/*.pth')
+def load_last_model(dir_name):
+    # dir_path内に含まれる.pthファイルから最後のエポックのものを持ってくる
+    models = glob(os.path.join('./models/', dir_name, '*.pth'))  
     print(models)
     model_ids = [(int(f.split('_')[1]), f) for f in models]
     start_epoch, last_cp = max(model_ids, key=lambda item:item[0])
@@ -332,13 +336,19 @@ def load_last_model():
     model.load_state_dict(torch.load(last_cp))
     return start_epoch, last_cp
 
-def resume_training():
-    start_epoch, _ = load_last_model()
+def resume_training(dir_name):
+    start_epoch, _ = load_last_model(dir_name)
+    print('resume training from Epoch %d' % (start_epoch+1))
 
     for epoch in range(start_epoch + 1, start_epoch + args.epochs + 1):
         train_loss = train(epoch)
         test_loss = test(epoch)
-        torch.save(model.state_dict(), './models/Epoch_{}_Train_loss_{:.4f}_Test_loss_{:.4f}.pth'.format(epoch, train_loss, test_loss))
+        target_dir = os.path.join(
+            './models/',
+            dir_name,
+            'Epoch_{}_Train_loss_{:.4f}_Test_loss_{:.4f}.pth'.format(epoch, train_loss, test_loss)
+            )
+        torch.save(model.state_dict(), target_dir)
 
 def last_model_to_cpu():
     _, last_cp = load_last_model()
@@ -358,6 +368,7 @@ def data_rename(dataPath):
             os.rename(ls_file[count], os.path.join(dataPath, "img{0:06d}".format(count) + os.path.splitext(ls_file[count])[1]))
 
 def train_from_scratch():
+    print('start training from scrach')
     for epoch in range(1, args.epochs + 1):
         train_loss = train(epoch)
         test_loss = test(epoch)
@@ -368,10 +379,14 @@ if __name__ == '__main__':
     # data_rename("../data/vae_solar/train/train")
     # data_rename("../data/vae_solar/test/test")
     if args.resume:
-        resume_training()
+        # 学習済みのモデルを使って学習を再開する
+        dir_name = args.model_dirname
+        resume_training(dir_name)
     else:
-        time_now = datetime.datetime.now().strftime('%Y%m%d_%H%M')
+        # 最初から学習する
+        time_now = datetime.datetime.now().strftime('%Y%m%d%H%M')
         save_dir = os.path.join('./models/', time_now)
+        dir_name = time_now
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
